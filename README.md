@@ -1,1 +1,1 @@
-# TTIC_Unsupervised_Final_Project
+# TTIC 31220 Unsupervised Machine Learning and Data Anaysis, Final Project
