@@ -1,0 +1,3 @@
+'ticker'
+'per_end_date'
+'avg_d_shares'
