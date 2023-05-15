@@ -11,9 +11,8 @@ from sklearn.model_selection import ParameterGrid
 import multiprocess as mp
 
 class DimensionalityReduction:
-    def __init__(self, df, date_range, formation_period):
+    def __init__(self, df = None, formation_period = None):
         self.df = df
-        self.date_range = date_range
         self.formation_period = formation_period
         self.scaler = StandardScaler()
 
