@@ -11,13 +11,12 @@ class Position(Enum):
 class DataPreparation:
     def __init__(self, data: pd.DataFrame or np.array, tickers: list or np.array, 
                  train_period: list or np.array, test_period: list or np.array, 
-                 window = 10, dates = None):
+                 dates = None):
         self.tickers = tickers
         self.dates = dates
         self.train_period = train_period
         self.test_period = test_period
         self.x_train, self.y_train, self.x_test, self.y_test = self.split_xy(data)
-        self.window = window
 
     def check_data(self, data):
         if data.shape[1] != len(self.tickers):
@@ -79,39 +78,89 @@ class LinearSignal:
         signals[signal_2sig] = 2
         signals[signal_neg2sig] = -2
         return signals
-        
-    def get_positions(self):
+
+    def get_pnl(self):
         signals = self.get_signals()
-        signals_change = np.diff(signals, prepend=0)
-        
-        positions = np.zeros(len(signals))
         current = Position.FLAT
+        
+        total_position = self.x_test + self.y_test * self.beta
+        pnl = 0
+        current_position = 0
+        ret = 1
+        for ind, p in enumerate(signals):
+            
+            # Exit current position
+            if (current == Position.LONG and p >=0) \
+                or (current == Position.SHORT and p <= 0):
+                pnl += current.value * self.spread[ind]
+                ret *= 1 + pnl/current_position
+                current = Position.FLAT
+                
+            # Enter new position
+            if p == 2 and current != Position.SHORT:
+                current = Position.SHORT
+                pnl = self.spread[ind] # get cash from short
+                current_position = total_position[ind]
+            elif p == -2 and current != Position.LONG:
+                current = Position.LONG
+                pnl = -self.spread[ind] # pay cash
+                current_position = total_position[ind]
+        
+        #Exit last position
+        if current != Position.FLAT:
+            pnl += current.value * self.spread[ind]
+            ret *= 1 + pnl/current_position
+        
+        return ret - 1
+
+
+    def get_cumm_pnl(self):
+        signals = self.get_signals()
+        current = Position.FLAT
+        total_position = self.x_test + self.y_test * self.beta
+        pnl = 0
+        current_position = 1
+        mkt_values = np.zeros(len(signals))
+        ret = 1
         for ind, p in enumerate(signals):
             # Exit current position
             if (current == Position.LONG and p >=0) \
                 or (current == Position.SHORT and p <= 0):
+                pnl += current.value * self.spread[ind]
+                ret *= 1 + pnl/current_position
                 current = Position.FLAT
+                pnl, current_position = 0, 1
             # Enter new position
             if p == 2 and current != Position.SHORT:
                 current = Position.SHORT
+                pnl = self.spread[ind] # get cash from short
+                current_position = total_position[ind]
             elif p == -2 and current != Position.LONG:
                 current = Position.LONG
-            # Save updated position
-            positions[ind] = current.value
-        self.positions = positions
-        return positions
-            
-    def get_pnl(self):
-        positions = self.get_positions()
-        cash_flow = np.diff(-positions, prepend=0)
-        pnl = sum(cash_flow * self.spread)
-        return pnl
-        
-    def get_cumm_pnl(self):
-        positions = self.get_positions()
-        cash_flow = self.spread * np.diff(-positions, prepend = 0)
-        net_position = np.diff(self.spread * positions, prepend = 0)
-        cumm_pnl = np.cumsum(net_position + cash_flow)
-        return cumm_pnl
-        
-        
+                pnl = -self.spread[ind] # pay cash
+                current_position = total_position[ind]
+            mkt_values[ind] = ret * (1 + (pnl + current.value * self.spread[ind])/current_position)
+        return mkt_values
+
+
+class Batch_Signal:
+    def __init__(self, data, pair_list, train_period, test_period):
+        self.data = data
+        self.pair_list = pair_list
+        self.trian_period = train_period
+        self.test_period = test_period
+    
+    def data_preparation(self):
+        data_batch = []
+        for pair in self.pair_list:
+            data_batch.append(DataPreparation(self.data[pair], self.trian_period, self.test_period))
+        return data_batch
+    
+    def get_pnls(self):
+        data_batch = self.data_preparation()
+        pnls = 0
+        for data in data_batch:
+            signal = LinearSignal(data.x_train, data.y_train, data.x_test, data.y_test, data.tickers)
+            pnls += signal.get_pnl()
+        return pnls
+    
