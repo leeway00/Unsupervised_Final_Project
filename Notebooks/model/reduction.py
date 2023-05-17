@@ -1,53 +1,41 @@
 
+import os
+from itertools import combinations
+
+import pickle as pkl
 import pandas as pd
 import numpy as np
-import pickle as pkl
-import os
 
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import make_column_transformer
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import ParameterGrid
+from statsmodels.tsa.stattools import coint
 
 import multiprocess as mp
 
 class DimensionalityReduction:
-    def __init__(self, df = None, formation_period = None):
-        self.df = df
-        self.formation_period = formation_period
+    def __init__(self, model, name, X_train, idx, price):
+        self.model = model
+        self.name = name
+        self.X_train = X_train
+        self.idx = idx
+        self.price = price
         self.scaler = StandardScaler()
 
-    def __subset_data(self, period_start, period_end):
-        # period_end = period_start + pd.DateOffset(months=int(formation_period[:-1]))
-        df_period = self.df.loc[period_start.strftime('%Y-%m'):period_end.strftime('%Y-%m')]
-        to_drop = df_period.loc[df_period.isna().any(axis=1)]['ticker'].unique()
-        df_period = df_period.loc[~df_period['ticker'].isin(to_drop)]
-        return df_period
-
-    def preprocess(self, period_start, period_end):
-        # Preprocessing steps
-        df_period = self.__subset_data(period_start, period_end)
-        df_train = df_period.reset_index().sort_values(['ticker', 'date'])
-        idx = df_train[['ticker', 'date']].values
-        df_train = df_train.drop(['date','ticker'], axis=1)
-
-        ohe_column = 'gicdesc'
-        ohe_categories = df_train[ohe_column].unique().tolist()
-        enc = OneHotEncoder(sparse_output=False, categories=[ohe_categories]) 
-        transformer = make_column_transformer((enc, [ohe_column]), remainder='passthrough') 
-        X_train = transformer.fit_transform(df_train)
-        
-        X_train = self.scaler.fit_transform(X_train)
-        return X_train, idx
-
-    def __flatten_data(self, reduced_data, idx):
-        merged_df = pd.DataFrame(np.concatenate((idx, reduced_data), axis=1))\
+    def __flatten_data(self, reduced_data):
+        merged_df = pd.DataFrame(np.concatenate((self.idx, self.price, reduced_data), axis=1))\
             .set_index([0,1]).stack().unstack(0).dropna(axis=1, how = 'any')
         return merged_df
 
-    def dimensionality_reduction(self, X_train, idx, model, n_components):
-        reduced_data = model(n_components = n_components).fit_transform(X_train)
-        merged_df = self.__flatten_data(reduced_data, idx)
+    def dimensionality_reduction(self, **params: dict):
+        reduced_data = self.model(**params).fit_transform(self. X_train)
+        merged_df = self.__flatten_data(reduced_data)
         return merged_df
+    
+    def fit_generator(self, params: dict):
+        def gen():
+            for p in ParameterGrid(params):
+                yield self.dimensionality_reduction(**p)
+        return gen()
 
 
 class Clustering:
@@ -74,3 +62,30 @@ class Clustering:
         with mp.Pool(os.cpu_count()) as pool:
             clusterings = pool.starmap(self.train_clustering, iterable = gen())
         return clusterings
+    
+class CointegratedSelection:
+    def __init__(self, normalized_price: pd.DataFrame, significance=0.05):
+        self.price = normalized_price
+        self.significance = significance
+    
+    def check_cointegration(self, pair):
+        ticker1, ticker2 = pair
+
+        # Perform the cointegration test
+        _, p_value, _ = coint(self.price[ticker1], self.price[ticker2])
+        return p_value
+    
+    def __calculate_cointegrations(self, cluster):
+        coint_res = {'pair': [], 'p-value': []}
+        for i in range(len(cluster)):
+            for pair in combinations(cluster.iloc[i], 2):
+                coint_res['p-value'].append(self.check_cointegration(pair))
+                coint_res['pair'].append(pair)
+        pairs = pd.DataFrame(coint_res).sort_values('p-value').reset_index(drop=True)
+        return pairs
+    
+    def select_cointegrated_pairs(self, cluster, stock_num = 5, use_significance = False):
+        pairs = self.__calculate_cointegrations(cluster)
+        if use_significance:
+            return pairs[pairs['p-value'] < self.significance]
+        return pairs[:stock_num]
