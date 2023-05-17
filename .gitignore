@@ -131,3 +131,10 @@ dmypy.json
 
 *.csv
 *.zip
+
+*.pkl
+
+/data/sp500_tickers/*.ipynb
+/data/sp500_tickers/.gitignore
+/data/sp500_tickers/LICENSE
+/data/sp500_tickers/README.md
