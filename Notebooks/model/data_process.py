@@ -66,10 +66,10 @@ class DataPrepation:
         X_train = transformer.fit_transform(df_train)
         X_train = self.scaler.fit_transform(X_train)
         
-        # price_norm = pd.pivot_table(df_period, index = df_period.index, columns = 'ticker', values = 'close')
-        # price_norm /= price_norm.iloc[0]
-        # self.price = price_norm
-        price_norm = self.price_norm(start, end).unstack().values.reshape(-1,1)
+        price_norm = pd.pivot_table(df_period, index = df_period.index, columns = 'ticker', values = 'close')
+        price_norm /= price_norm.iloc[0]
+        price_norm = price_norm.unstack().values.reshape(-1,1)
+        # price_norm = self.price_norm(start, end).unstack().values.reshape(-1,1)
         return X_train, idx, price_norm
     
     def __get_price_data(self, start, end):
