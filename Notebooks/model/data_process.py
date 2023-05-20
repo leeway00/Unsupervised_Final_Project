@@ -55,6 +55,13 @@ class DataPrepation:
     def dimension_reduction_preprocess(self, start, end):
         # Preprocessing steps
         df_period = self.__get_all_data(start, end)
+        price_norm = pd.pivot_table(df_period, index = df_period.index, columns = 'ticker', values = 'close')
+        ticker_avail = price_norm.columns[~price_norm.isna().any()]
+        price_norm = price_norm[ticker_avail]        
+        price_norm /= price_norm.iloc[0]
+        price_norm = price_norm.unstack().values.reshape(-1,1)
+        
+        df_period = df_period[df_period.ticker.isin(ticker_avail)]
         df_train = df_period.reset_index().sort_values(['ticker', 'date'])
         idx = df_train[['ticker', 'date']].values
         df_train = df_train.drop(['date','ticker'], axis=1)
@@ -69,7 +76,7 @@ class DataPrepation:
         price_norm = pd.pivot_table(df_period, index = df_period.index, columns = 'ticker', values = 'close')
         price_norm /= price_norm.iloc[0]
         price_norm = price_norm.unstack().values.reshape(-1,1)
-        # price_norm = self.price_norm(start, end).unstack().values.reshape(-1,1)
+        # return df_train, df_period
         return X_train, idx, price_norm
     
     def __get_price_data(self, start, end):
