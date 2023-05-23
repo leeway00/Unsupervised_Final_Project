@@ -26,7 +26,7 @@ class DimensionalityReduction:
             .set_index([0,1]).stack().unstack(0).dropna(axis=1, how = 'any')
         return merged_df
 
-    def dimensionality_reduction(self, **params: dict):
+    def dimensionality_reduction(self, params: dict):
         reduced_data = self.model(**params).fit_transform(self. X_train)
         merged_df = self.__flatten_data(reduced_data)
         return merged_df
@@ -34,7 +34,7 @@ class DimensionalityReduction:
     def fit_generator(self, params: dict):
         def gen():
             for p in ParameterGrid(params):
-                yield self.dimensionality_reduction(**p)
+                yield self.dimensionality_reduction(p)
         return gen()
 
 
